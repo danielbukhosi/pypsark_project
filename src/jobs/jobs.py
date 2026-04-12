@@ -236,61 +236,50 @@ result6 = (
 
 result6.show(10)
 
-w_total = Window .partitionBy("ci.city")
+w_rank = Window.partitionBy("city").orderBy(F.desc("total_rental_hours"))
 
-result7 = (
-          category.alias("ca").join(
-                             film_category.alias("fc"),
-                             F.col("ca.category_id")==F.col("fc.category_id"),
-                             "left"
-                             )
-                             .join(
-                               film.alias("f"),
-                               F.col("fc.film_id")==F.col("f.film_id"),
-                               "left"
-                             )
-                             .join(
-                               inventory.alias("i"),
-                               F.col("f.film_id")==F.col("i.film_id"),
-                               "left"
-                             )
-                             .join(
-                               rental.alias("r"),
-                               F.col("i.inventory_id")==F.col("r.inventory_id"),
-                               "left"
-                             )
-                             .join(
-                               customer.alias("c"),
-                               F.col("r.customer_id")==F.col("c.customer_id"),
-                               "left"
-                             )
-                             .join(
-                               address.alias("a"),
-                               F.col("c.address_id")==F.col("a.address_id"),
-                               "left"
-                             )
-                             .join(
-                               city.alias("ci"),
-                               F.col("a.city_id")==F.col("ci.city_id"),
-                               "left"
-                             )
-                             .filter((F.col("ca.name").startswith("a")) | (F.col("ca.name").startswith("A")))
-                             .filter(F.col("ci.city").contains("-"))
-                             .withColumn(
-                                     "total_rental_hours",
-                                     F.sum(F.col("f.rental_duration")).over(w_total)
-                             )
-                             .select("city","name",'total_rental_hours').distinct()
-                             .orderBy(F.desc("total_rental_hours"))
+result7_01 = (
+    category.alias("ca")
+    .join(film_category.alias("fc"), F.col("ca.category_id") == F.col("fc.category_id"), "left")
+    .join(film.alias("f"), F.col("fc.film_id") == F.col("f.film_id"), "left")
+    .join(inventory.alias("i"), F.col("f.film_id") == F.col("i.film_id"), "left")
+    .join(rental.alias("r"), F.col("i.inventory_id") == F.col("r.inventory_id"), "left")
+    .join(customer.alias("c"), F.col("r.customer_id") == F.col("c.customer_id"), "left")
+    .join(address.alias("a"), F.col("c.address_id") == F.col("a.address_id"), "left")
+    .join(city.alias("ci"), F.col("a.city_id") == F.col("ci.city_id"), "left")
+    .filter(F.col("ca.name").ilike("a%")) 
+    #  Perform Aggregation FIRST
+    .groupBy(F.col("ci.city").alias("city"), F.col("ca.name").alias("category_name"))
+    .agg(F.sum("f.rental_duration").alias("total_rental_hours"))
+    #  Apply Rank AFTER Aggregation
+    .withColumn("total_rental_hours_ranking", F.dense_rank().over(w_rank))
+    .filter(F.col("total_rental_hours_ranking") == 1)
+    .orderBy(F.desc("total_rental_hours"))
 )
- 
-result7.show(10)
 
-time.sleep(20) # chance to view spark UI :)
+result7_01.show(10)
+
+result7_02 = (
+    category.alias("ca")
+    .join(film_category.alias("fc"), F.col("ca.category_id") == F.col("fc.category_id"), "left")
+    .join(film.alias("f"), F.col("fc.film_id") == F.col("f.film_id"), "left")
+    .join(inventory.alias("i"), F.col("f.film_id") == F.col("i.film_id"), "left")
+    .join(rental.alias("r"), F.col("i.inventory_id") == F.col("r.inventory_id"), "left")
+    .join(customer.alias("c"), F.col("r.customer_id") == F.col("c.customer_id"), "left")
+    .join(address.alias("a"), F.col("c.address_id") == F.col("a.address_id"), "left")
+    .join(city.alias("ci"), F.col("a.city_id") == F.col("ci.city_id"), "left")
+    .filter(F.col("ci.city").contains("-")) 
+    # Perform Aggregation FIRST
+    .groupBy(F.col("ci.city").alias("city"), F.col("ca.name").alias("category_name"))
+    .agg(F.sum("f.rental_duration").alias("total_rental_hours"))
+    #  Apply Rank AFTER Aggregation
+    .withColumn("total_rental_hours_ranking", F.dense_rank().over(w_rank))
+    .filter(F.col("total_rental_hours_ranking") == 1)
+    .orderBy(F.desc("total_rental_hours"))
+)
+
+result7_02.show(10)
+
+
+time.sleep(20) # Chance to see spark UI
 spark.stop()
-
-
-
-
-
-
